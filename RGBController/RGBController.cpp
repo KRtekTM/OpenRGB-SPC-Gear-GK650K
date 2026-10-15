@@ -2059,12 +2059,11 @@ void RGBController::DeviceCallThreadFunction()
 
     while(DeviceThreadRunning.load() == true)
     {
-        if(CallFlag_UpdateMode.load() == true)
+        if(CallFlag_UpdateMode.exchange(false) == true)
         {
             if(flags & CONTROLLER_FLAG_RESET_BEFORE_UPDATE)
             {
                 AccessMutex.lock_shared();
-                CallFlag_UpdateMode = false;
                 DeviceMutex.lock();
                 DeviceUpdateMode();
                 DeviceMutex.unlock();
@@ -2076,16 +2075,14 @@ void RGBController::DeviceCallThreadFunction()
                 DeviceMutex.lock();
                 DeviceUpdateMode();
                 DeviceMutex.unlock();
-                CallFlag_UpdateMode = false;
                 AccessMutex.unlock_shared();
             }
         }
-        if(CallFlag_UpdateLEDs.load() == true)
+        if(CallFlag_UpdateLEDs.exchange(false) == true)
         {
             if(flags & CONTROLLER_FLAG_RESET_BEFORE_UPDATE)
             {
                 AccessMutex.lock_shared();
-                CallFlag_UpdateLEDs = false;
                 DeviceMutex.lock();
                 DeviceUpdateLEDs();
                 DeviceMutex.unlock();
@@ -2097,7 +2094,6 @@ void RGBController::DeviceCallThreadFunction()
                 DeviceMutex.lock();
                 DeviceUpdateLEDs();
                 DeviceMutex.unlock();
-                CallFlag_UpdateLEDs = false;
                 AccessMutex.unlock_shared();
             }
         }

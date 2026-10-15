@@ -139,13 +139,16 @@ int EVisionV2KeyboardController::Query(uint8_t cmd, uint16_t offset, const uint8
 
     int bytes_read;
     {
-        const std::lock_guard<std::mutex> lock(query_mutex);
+        const std::lock_guard<std::recursive_mutex> lock(query_mutex);
 
-        hid_write(dev, buffer, sizeof(buffer));
+        if(hid_write(dev, buffer, sizeof(buffer)) != sizeof(buffer))
+        {
+            return -256;
+        }
 
         do
         {
-            bytes_read = hid_read(dev, buffer, sizeof(buffer));
+            bytes_read = hid_read_timeout(dev, buffer, sizeof(buffer), 1000);
         } while(bytes_read != 0 && buffer[0] != EVISION_V2_REPORT_ID);
     }
     query_check_buffer(bytes_read == sizeof(buffer));
@@ -226,6 +229,8 @@ int EVisionV2KeyboardController::Write(uint8_t cmd, uint16_t offset, const uint8
 
 int EVisionV2KeyboardController::GetMode(EVisionV2KeyboardPart part, EvisionV2ModeConfig& config)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     uint8_t buffer[18];
     memset(buffer, 0, sizeof(buffer));
 
@@ -251,10 +256,10 @@ int EVisionV2KeyboardController::GetMode(EVisionV2KeyboardPart part, EvisionV2Mo
             size = sizeof(buffer);
             break;
         case EVISION_V2_KEYBOARD_PART_LOGO:
-        case ENDORFY_KEYBOARD_PART_EDGE:
             offset += EVISION_V2_PARAMETER_LOGO;
             size = EVISION_V2_PARAMETER_LOGO_ON_OFF - EVISION_V2_PARAMETER_LOGO + 1;
             break;
+        case ENDORFY_KEYBOARD_PART_EDGE:
         case EVISION_V2_KEYBOARD_PART_EDGE:
             offset += EVISION_V2_PARAMETER_EDGE;
             size = EVISION_V2_PARAMETER_END - EVISION_V2_PARAMETER_EDGE;
@@ -289,7 +294,7 @@ int EVisionV2KeyboardController::GetMode(EVisionV2KeyboardPart part, EvisionV2Mo
             }
         }
     }
-    else if(part == EVISION_V2_KEYBOARD_PART_LOGO || part ==  ENDORFY_KEYBOARD_PART_EDGE)
+    else if(part == EVISION_V2_KEYBOARD_PART_LOGO)
     {
         // Use ledmode for logo on/off
         config.ledmode = buffer[EVISION_V2_PARAMETER_LOGO_ON_OFF - EVISION_V2_PARAMETER_LOGO];
@@ -300,6 +305,8 @@ int EVisionV2KeyboardController::GetMode(EVisionV2KeyboardPart part, EvisionV2Mo
 
 void EVisionV2KeyboardController::SetMode(EVisionV2KeyboardPart part, const EvisionV2ModeConfig& config)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     uint8_t buffer[18];
     memset(buffer, 0, sizeof(buffer));
 
@@ -319,24 +326,33 @@ void EVisionV2KeyboardController::SetMode(EVisionV2KeyboardPart part, const Evis
             buffer[EVISION_V2_PARAMETER_LED_MODE_COLOR] = config.ledmode;
         }
     }
-    else if(part == EVISION_V2_KEYBOARD_PART_LOGO || part ==  ENDORFY_KEYBOARD_PART_EDGE)
+    else if(part == EVISION_V2_KEYBOARD_PART_LOGO)
     {
         // Use ledmode for logo on/off
         buffer[EVISION_V2_PARAMETER_LOGO_ON_OFF - EVISION_V2_PARAMETER_LOGO] = config.ledmode;
     }
 
-    BeginConfigure();
+    if(BeginConfigure() < 0)
+    {
+        return;
+    }
+
     uint8_t current_profile;
 
     int ret = Read(EVISION_V2_CMD_READ_CONFIG, EVISION_V2_OFFSET_CURRENT_PROFILE, 1, &current_profile);
     if(ret < 0)
     {
+        EndConfigure();
         return;
     }
     if(current_profile > 2)
     {
         current_profile = 0;
-        Write(EVISION_V2_CMD_WRITE_CONFIG, EVISION_V2_OFFSET_CURRENT_PROFILE, &current_profile, 1);
+        if(Write(EVISION_V2_CMD_WRITE_CONFIG, EVISION_V2_OFFSET_CURRENT_PROFILE, &current_profile, 1) < 0)
+        {
+            EndConfigure();
+            return;
+        }
     }
 
     uint16_t offset = 0;
@@ -350,26 +366,38 @@ void EVisionV2KeyboardController::SetMode(EVisionV2KeyboardPart part, const Evis
             size = sizeof(buffer);
             break;
         case EVISION_V2_KEYBOARD_PART_LOGO:
-        case ENDORFY_KEYBOARD_PART_EDGE:
             offset += EVISION_V2_PARAMETER_LOGO;
             size = EVISION_V2_PARAMETER_LOGO_ON_OFF - EVISION_V2_PARAMETER_LOGO + 1;
             break;
+        case ENDORFY_KEYBOARD_PART_EDGE:
         case EVISION_V2_KEYBOARD_PART_EDGE:
             offset += EVISION_V2_PARAMETER_EDGE;
             size = EVISION_V2_PARAMETER_END - EVISION_V2_PARAMETER_EDGE;
             break;
     }
 
-    Write(EVISION_V2_CMD_WRITE_CONFIG, offset, buffer, size);
+    if(Write(EVISION_V2_CMD_WRITE_CONFIG, offset, buffer, size) < 0)
+    {
+        EndConfigure();
+        return;
+    }
+
     if((part == EVISION_V2_KEYBOARD_PART_KEYBOARD) && (config.mode == EVISION_V2_MODE_CUSTOM))
     {
-        Write(EVISION_V2_CMD_WRITE_CONFIG, current_profile * 0x40 + EVISION_V2_OFFSET_FIRST_PROFILE + EVISION_V2_PARAMETER_CURRENT_CUSTOM_MODE, &config.ledmode, sizeof(config.ledmode));
+        if(Write(EVISION_V2_CMD_WRITE_CONFIG, current_profile * 0x40 + EVISION_V2_OFFSET_FIRST_PROFILE + EVISION_V2_PARAMETER_CURRENT_CUSTOM_MODE, &config.ledmode, sizeof(config.ledmode)) < 0)
+        {
+            EndConfigure();
+            return;
+        }
     }
+
     EndConfigure();
 }
 
 void EVisionV2KeyboardController::SetLedsDirect(const std::vector<RGBColor>& colours)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     const size_t colours_num = std::min(colours.size(), led_count);
 
     uint8_t* buffer = new uint8_t[3 * map_size];
@@ -390,6 +418,8 @@ void EVisionV2KeyboardController::SetLedsDirect(const std::vector<RGBColor>& col
 
 void EVisionV2KeyboardController::SetLedDirect(int led, RGBColor colour)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     uint8_t buffer[3];
     buffer[0] = RGBGetRValue(colour);
     buffer[1] = RGBGetGValue(colour);
@@ -400,17 +430,23 @@ void EVisionV2KeyboardController::SetLedDirect(int led, RGBColor colour)
 
 void EVisionV2KeyboardController::RefreshLedDirect()
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     // Write one zero byte in the first blank space
     Query(EVISION_V2_CMD_SEND_DYNAMIC_COLORS, BLANK_SPACE * 3, nullptr, 1, nullptr);
 }
 
 void EVisionV2KeyboardController::EndLedsDirect()
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     Query(EVISION_V2_CMD_END_DYNAMIC_COLORS);
 }
 
 int EVisionV2KeyboardController::GetLedsCustom(uint8_t colorset, std::vector<RGBColor>& colours)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     if(colorset > 9)
     {
         return -256;
@@ -439,6 +475,8 @@ int EVisionV2KeyboardController::GetLedsCustom(uint8_t colorset, std::vector<RGB
 
 void EVisionV2KeyboardController::SetLedsCustom(uint8_t colorset, const std::vector<RGBColor>& colours)
 {
+    const std::lock_guard<std::recursive_mutex> lock(query_mutex);
+
     if(colorset > 9)
     {
         return;

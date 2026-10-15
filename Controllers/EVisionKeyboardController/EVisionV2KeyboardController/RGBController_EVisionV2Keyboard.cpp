@@ -281,9 +281,10 @@ static const char *led_endorfy[] =
       like directions for some modes.
 \*-------------------------------------------------------------------*/
 
-RGBController_EVisionV2Keyboard::RGBController_EVisionV2Keyboard(EVisionV2KeyboardController* controller_ptr, EVisionV2KeyboardPart kb_part)
+RGBController_EVisionV2Keyboard::RGBController_EVisionV2Keyboard(EVisionV2KeyboardController* controller_ptr, EVisionV2KeyboardPart kb_part, std::shared_ptr<EVisionV2KeyboardController> controller_owner_ptr)
 {
     controller  = controller_ptr;
+    controller_owner = std::move(controller_owner_ptr);
     part        = kb_part;
 
     name        = controller->GetName();
@@ -311,6 +312,7 @@ RGBController_EVisionV2Keyboard::RGBController_EVisionV2Keyboard(EVisionV2Keyboa
             break;
 
         case ENDORFY_KEYBOARD_PART_EDGE:
+            name += " Side LEDs";
             SetupEdgeModes();
             break;
     }
@@ -339,7 +341,10 @@ RGBController_EVisionV2Keyboard::~RGBController_EVisionV2Keyboard()
         delete keepalive_thread;
     }
 
-    delete controller;
+    if(!controller_owner)
+    {
+        delete controller;
+    }
 }
 
 void RGBController_EVisionV2Keyboard::SetupKeyboardModes()
@@ -760,6 +765,28 @@ void RGBController_EVisionV2Keyboard::SetupEdgeModes()
 
 void RGBController_EVisionV2Keyboard::SetupZones()
 {
+    if(part == ENDORFY_KEYBOARD_PART_EDGE)
+    {
+        zone side_zone;
+        side_zone.name         = "Side LEDs";
+        side_zone.type         = ZONE_TYPE_LINEAR;
+        side_zone.leds_count   = 1;
+        side_zone.leds_min     = 1;
+        side_zone.leds_max     = 1;
+        side_zone.flags        = ZONE_FLAG_MANUALLY_CONFIGURABLE_NAME
+                               | ZONE_FLAG_MANUALLY_CONFIGURABLE_TYPE
+                               | ZONE_FLAG_MANUALLY_CONFIGURABLE_MATRIX_MAP;
+        zones.push_back(side_zone);
+
+        led side_led;
+        side_led.name  = "Side LED strip";
+        side_led.value = 0;
+        leds.push_back(side_led);
+
+        SetupColors();
+        return;
+    }
+
     unsigned short leds_count;
     unsigned int *matrix_map;
     const char **led_names;
@@ -788,6 +815,9 @@ void RGBController_EVisionV2Keyboard::SetupZones()
     KB_zone.leds_count          = leds_count;
     KB_zone.leds_min            = KB_zone.leds_count;
     KB_zone.leds_max            = KB_zone.leds_count;
+    KB_zone.flags               = ZONE_FLAG_MANUALLY_CONFIGURABLE_NAME
+                                | ZONE_FLAG_MANUALLY_CONFIGURABLE_TYPE
+                                | ZONE_FLAG_MANUALLY_CONFIGURABLE_MATRIX_MAP;
     KB_zone.matrix_map.Set(EVISION_V2_MATRIX_HEIGHT, EVISION_V2_MATRIX_WIDTH, matrix_map);
     zones.push_back(KB_zone);
 

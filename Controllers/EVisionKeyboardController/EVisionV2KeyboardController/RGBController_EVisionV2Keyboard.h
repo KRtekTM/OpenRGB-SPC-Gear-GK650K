@@ -19,7 +19,7 @@
 class RGBController_EVisionV2Keyboard : public RGBController
 {
 public:
-    RGBController_EVisionV2Keyboard(EVisionV2KeyboardController* controller_ptr, EVisionV2KeyboardPart kb_part);
+    RGBController_EVisionV2Keyboard(EVisionV2KeyboardController* controller_ptr, EVisionV2KeyboardPart kb_part, std::shared_ptr<EVisionV2KeyboardController> controller_owner = nullptr);
     ~RGBController_EVisionV2Keyboard();
 
     void SetupZones();
@@ -40,6 +40,7 @@ private:
     void KeepaliveThread();
 
     EVisionV2KeyboardController*                       controller;
+    std::shared_ptr<EVisionV2KeyboardController>       controller_owner;
     EVisionV2KeyboardPart                              part;
     EVisionV2KeyboardLayout                            layout;
 

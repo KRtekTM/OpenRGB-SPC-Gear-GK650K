@@ -29,6 +29,7 @@
 | Keyboard product IDs                                      |
 \*---------------------------------------------------------*/
 #define ENDORFY_OMNIS_PID                           0x0012
+#define SPC_GK650_PID                               0x4E93
 #define BYGG_CSB_ICL01_PID                          0x5041
 
 DetectedControllers DetectEVisionV2Keyboards(hid_device_info* info, const std::string& name)
@@ -39,18 +40,18 @@ DetectedControllers DetectEVisionV2Keyboards(hid_device_info* info, const std::s
 
     if(dev)
     {
-        EVisionV2KeyboardController*     controller     = new EVisionV2KeyboardController(dev, info->path, EVISION_V2_KEYBOARD_LAYOUT, name);
-        RGBController_EVisionV2Keyboard* rgb_controller = new RGBController_EVisionV2Keyboard(controller, EVISION_V2_KEYBOARD_PART_KEYBOARD);
+        std::shared_ptr<EVisionV2KeyboardController> controller = std::make_shared<EVisionV2KeyboardController>(dev, info->path, EVISION_V2_KEYBOARD_LAYOUT, name);
+        RGBController_EVisionV2Keyboard* rgb_controller = new RGBController_EVisionV2Keyboard(controller.get(), EVISION_V2_KEYBOARD_PART_KEYBOARD, controller);
 
         detected_controllers.push_back(rgb_controller);
 
         if(!settings.contains("AdditionalZones") || settings["AdditionalZones"] == true)
         {
-            rgb_controller                             = new RGBController_EVisionV2Keyboard(controller, EVISION_V2_KEYBOARD_PART_LOGO);
+            rgb_controller                             = new RGBController_EVisionV2Keyboard(controller.get(), EVISION_V2_KEYBOARD_PART_LOGO, controller);
 
             detected_controllers.push_back(rgb_controller);
 
-            rgb_controller                             = new RGBController_EVisionV2Keyboard(controller, EVISION_V2_KEYBOARD_PART_EDGE);
+            rgb_controller                             = new RGBController_EVisionV2Keyboard(controller.get(), EVISION_V2_KEYBOARD_PART_EDGE, controller);
 
             detected_controllers.push_back(rgb_controller);
         }
@@ -63,18 +64,22 @@ DetectedControllers DetectEndorfyKeyboards(hid_device_info* info, const std::str
 {
     DetectedControllers detected_controllers;
     json                settings    = ResourceManager::get()->GetSettingsManager()->GetSettings("EndorfySettings");
+    std::shared_ptr<EVisionV2KeyboardController> controller;
     hid_device*         dev         = hid_open_path(info->path);
 
     if(dev)
     {
-        EVisionV2KeyboardController*     controller     = new EVisionV2KeyboardController(dev, info->path, ENDORFY_KEYBOARD_LAYOUT, name);
-        RGBController_EVisionV2Keyboard* rgb_controller = new RGBController_EVisionV2Keyboard(controller, EVISION_V2_KEYBOARD_PART_KEYBOARD);
+        controller = std::make_shared<EVisionV2KeyboardController>(dev, info->path, ENDORFY_KEYBOARD_LAYOUT, name);
+        RGBController_EVisionV2Keyboard* rgb_controller = new RGBController_EVisionV2Keyboard(controller.get(), EVISION_V2_KEYBOARD_PART_KEYBOARD, controller);
 
         detected_controllers.push_back(rgb_controller);
+    }
 
-        if(!settings.contains("AdditionalZones") || settings["AdditionalZones"] == true)
+    if(!settings.contains("AdditionalZones") || settings["AdditionalZones"] == true)
+    {
+        if(controller)
         {
-            rgb_controller                              = new RGBController_EVisionV2Keyboard(controller, ENDORFY_KEYBOARD_PART_EDGE);
+            RGBController_EVisionV2Keyboard* rgb_controller = new RGBController_EVisionV2Keyboard(controller.get(), ENDORFY_KEYBOARD_PART_EDGE, controller);
 
             detected_controllers.push_back(rgb_controller);
         }
@@ -88,3 +93,4 @@ DetectedControllers DetectEndorfyKeyboards(hid_device_info* info, const std::str
 \*---------------------------------------------------------*/
 REGISTER_HID_DETECTOR_IP("EVision Keyboard 320F:5041",  DetectEVisionV2Keyboards,   EVISION_VID,    BYGG_CSB_ICL01_PID, 1, EVISION_KEYBOARD_USAGE_PAGE);
 REGISTER_HID_DETECTOR_IP("Endorfy Omnis",               DetectEndorfyKeyboards,     SPCGEAR_VID,    ENDORFY_OMNIS_PID,  1, EVISION_KEYBOARD_USAGE_PAGE);
+REGISTER_HID_DETECTOR_IP("SPC Gear GK650",              DetectEndorfyKeyboards,     SPCGEAR_VID,    SPC_GK650_PID,       1, EVISION_KEYBOARD_USAGE_PAGE);

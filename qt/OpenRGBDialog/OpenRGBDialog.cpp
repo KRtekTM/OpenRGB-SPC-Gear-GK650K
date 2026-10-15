@@ -1963,7 +1963,11 @@ void OpenRGBDialog::on_SetAllDevices(unsigned char red, unsigned char green, uns
     \*-----------------------------------------------------*/
     for(int device = 0; device < ui->DevicesTabBar->count(); device++)
     {
-        qobject_cast<OpenRGBDevicePage *>(ui->DevicesTabBar->widget(device))->SetCustomMode(red, green, blue);
+        OpenRGBDevicePage* device_page = qobject_cast<OpenRGBDevicePage *>(ui->DevicesTabBar->widget(device));
+        if(device_page != nullptr)
+        {
+            device_page->SetCustomMode(red, green, blue);
+        }
     }
 }
 

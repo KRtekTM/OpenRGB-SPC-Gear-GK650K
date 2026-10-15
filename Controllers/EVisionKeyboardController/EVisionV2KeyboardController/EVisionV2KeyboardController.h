@@ -12,6 +12,7 @@
 #pragma once
 
 #include <string>
+#include <memory>
 #include <hidapi.h>
 #include "RGBController.h"
 
@@ -193,5 +194,5 @@ private:
     uint8_t *   keyvalue_map;
     size_t      led_count;
 
-    std::mutex  query_mutex;
+    std::recursive_mutex query_mutex;
 };
